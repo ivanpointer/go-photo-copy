@@ -37,6 +37,36 @@ func main() {
 	// Create a new context
 	ctx, cancel := context.WithCancel(context.Background())
 
+	if len(os.Args) != 3 {
+		panic("must pass source and dest dir, in that order")
+	}
+
+	sourceDir := os.Args[1]
+	destDir := os.Args[2]
+	if err := os.MkdirAll(destDir, 0777); err != nil {
+		panic(err)
+	}
+
+	// Check if sourceDir and destDir exist and are directories
+	if _, err := os.Stat(sourceDir); os.IsNotExist(err) {
+		fmt.Println("Source directory does not exist.")
+		return
+	}
+	if _, err := os.Stat(destDir); os.IsNotExist(err) {
+		fmt.Println("Destination directory does not exist.")
+		return
+	}
+
+	// Check if we have appropriate permissions
+	if err := os.Chdir(sourceDir); err != nil {
+		fmt.Println("Cannot access source directory.")
+		return
+	}
+	if err := os.Chdir(destDir); err != nil {
+		fmt.Println("Cannot access destination directory.")
+		return
+	}
+
 	// Listen for SIGTERM signal
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
@@ -44,9 +74,6 @@ func main() {
 		<-c
 		cancel()
 	}()
-
-	sourceDir := "/Volumes/Untitled/DCIM" // Replace with your SD card path
-	destDir := "/Volumes/TOURO S/PHOTOS"  // Replace with your destination path
 
 	// Scan the source directory for image files and extract timestamps
 	photos := scanDirectoryForImages(sourceDir)
