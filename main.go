@@ -74,7 +74,7 @@ func main() {
 			// Continue your operation
 		}
 
-		fmt.Printf("COPYING CLUSTER %d OF %d...\n", i, len(clusters))
+		fmt.Printf("COPYING CLUSTER %d OF %d...\n", i+1, len(clusters))
 
 		// Sort each photo entry by time
 		slices.SortFunc(cluster, func(a dbscan.Point, b dbscan.Point) int {
@@ -129,7 +129,7 @@ func isImageFile(filePath string) bool {
 func copyFile(src, dst string) {
 	_, err := os.Stat(dst)
 	if err == nil {
-		fmt.Println("Destination file already exists. Skipping...")
+		fmt.Println("\t    * Destination file already exists. Skipping...")
 		return
 	}
 	if !os.IsNotExist(err) {
