@@ -90,6 +90,7 @@ func main() {
 	clusters := dbscan.Cluster(minPoints, epsilon, points...)
 
 	// Copy files based on clusters
+	copiedCount := 0
 	for i, cluster := range clusters {
 		// While scanning the directory and processing the images, periodically check if ctx is done:
 
@@ -122,8 +123,9 @@ func main() {
 			photo := point.(Photo)
 			dest := filepath.Join(clusterDir, filepath.Base(photo.Path))
 
-			fmt.Printf("\t%d:%d %d:%d: [%s] => [%s]\n", i+1, len(clusters), j+1, len(cluster), photo.Path, dest)
+			fmt.Printf("\t%d:%d %d:%d (%d:%d): [%s] => [%s]\n", i+1, len(clusters), j+1, len(cluster), copiedCount+1, len(points), photo.Path, dest)
 			copyFile(photo.Path, dest)
+			copiedCount++
 		}
 	}
 
