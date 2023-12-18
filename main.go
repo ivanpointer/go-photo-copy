@@ -26,7 +26,7 @@ func (p Photo) DistanceTo(other dbscan.Point) float64 {
 	opt := other.(Photo)
 	ot := opt.Time
 	dt := mt.Sub(ot)
-	return math.Abs(dt.Seconds())
+	return math.Abs(float64(dt.Milliseconds()))
 }
 
 func (p Photo) Name() string {
@@ -85,8 +85,8 @@ func main() {
 	}
 
 	// Run DBSCAN
-	epsilon := (4 * time.Hour).Seconds() // 1 minute in seconds, adjust as needed
-	minPoints := 2                       // minimum number of points to form a cluster
+	epsilon := float64((4 * time.Hour).Milliseconds()) // 1 minute in seconds, adjust as needed
+	minPoints := 2                                     // minimum number of points to form a cluster
 	clusters := dbscan.Cluster(minPoints, epsilon, points...)
 
 	// Copy files based on clusters
