@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -13,24 +12,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/kelindar/dbscan"
+	"github.com/djherbis/times"
 )
 
 type Photo struct {
 	Time time.Time
 	Path string
-}
-
-func (p Photo) DistanceTo(other dbscan.Point) float64 {
-	mt := p.Time
-	opt := other.(Photo)
-	ot := opt.Time
-	dt := mt.Sub(ot)
-	return math.Abs(float64(dt.Milliseconds()))
-}
-
-func (p Photo) Name() string {
-	return (p.Time).Format(time.DateTime)
 }
 
 func main() {
@@ -76,24 +63,22 @@ func main() {
 	}()
 
 	// Scan the source directory for image files and extract timestamps
-	photos := scanDirectoryForImages(sourceDir)
-
-	// Convert timestamps to DBSCAN points
-	points := make([]dbscan.Point, 0)
-	for _, t := range photos {
-		points = append(points, t)
+	photos, err := scanDirectoryForImages(sourceDir)
+	if err != nil {
+		panic(err)
 	}
+	slices.SortFunc(photos, func(a Photo, b Photo) int {
+		return a.Time.Compare(b.Time)
+	})
 
-	// Run DBSCAN
-	epsilon := float64((4 * time.Hour).Milliseconds()) // 1 minute in seconds, adjust as needed
-	minPoints := 2                                     // minimum number of points to form a cluster
-	clusters := dbscan.Cluster(minPoints, epsilon, points...)
+	gap := 3 * time.Hour
 
-	// Copy files based on clusters
+	// Copy the photos over
+	sessionCount := 0
 	copiedCount := 0
-	for i, cluster := range clusters {
-		// While scanning the directory and processing the images, periodically check if ctx is done:
-
+	var currentSession string
+	for i, photo := range photos {
+		// sigterm check
 		select {
 		case <-ctx.Done():
 			fmt.Println("SIGTERM RECEIVED, EXITING...")
@@ -102,48 +87,66 @@ func main() {
 			// Continue your operation
 		}
 
-		fmt.Printf("COPYING CLUSTER %d OF %d...\n", i+1, len(clusters))
-
-		// Sort each photo entry by time
-		slices.SortFunc(cluster, func(a dbscan.Point, b dbscan.Point) int {
-			pa := a.(Photo)
-			pb := b.(Photo)
-			return pa.Time.Compare(pb.Time)
-		})
-
-		// Grab the first entry, to name the group
-		firstPhoto := cluster[0].(Photo)
-
-		clusterDir := fmt.Sprintf("%s/%s", destDir, firstPhoto.Time.Format("2006-01-02-15-04-05"))
-		if err := os.MkdirAll(clusterDir, 0777); err != nil {
-			panic(err)
+		// copy the next photo
+		var last *Photo
+		if i > 0 {
+			last = &photos[i-1]
 		}
 
-		for j, point := range cluster {
-			photo := point.(Photo)
-			dest := filepath.Join(clusterDir, filepath.Base(photo.Path))
+		// Check for a new session
+		if currentSession == "" || (last != nil && last.Time.Add(gap).Before(photo.Time)) {
+			sessionCount++
+			currentSession = fmt.Sprintf("%s/%s", destDir, photo.Time.Format("2006-01-02-15-04-05"))
+			fmt.Printf("COPYING SESSION %d [%s]\n", sessionCount, currentSession)
 
-			fmt.Printf("\t%d:%d %d:%d (%d:%d): [%s] => [%s]\n", i+1, len(clusters), j+1, len(cluster), copiedCount+1, len(points), photo.Path, dest)
-			copyFile(photo.Path, dest)
-			copiedCount++
+			// Ensure the dest dir
+			if err := os.MkdirAll(currentSession, 0777); err != nil {
+				panic(err)
+			}
 		}
+
+		// // XXX: SKIP ALL BUT THE Xth SESSION
+		// if sessionCount != 6 {
+		// 	continue
+		// }
+
+		// Copy the photo
+		dest := filepath.Join(currentSession, filepath.Base(photo.Path))
+		fmt.Printf("\t%d:%d: [%s] => [%s] (%s)\n", i+1, len(photos), photo.Path, dest, photo.Time.Format("2006-01-02-15-04-05"))
+		copyFile(photo.Path, dest)
+		copiedCount++
 	}
 
 	fmt.Println("DONE!")
 }
 
-func scanDirectoryForImages(dirPath string) []Photo {
-	photos := make([]Photo, 0)
-	filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
-		if err == nil && !info.IsDir() && isImageFile(path) {
+func scanDirectoryForImages(dirPath string) ([]Photo, error) {
+	var photos []Photo
+	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && isImageFile(path) {
+			timeStat, err := times.Stat(path)
+			if err != nil {
+				return err
+			}
+			time := timeStat.ModTime()
+			if timeStat.HasBirthTime() {
+				time = timeStat.BirthTime()
+			}
+
 			photos = append(photos, Photo{
-				Time: info.ModTime(),
+				Time: time,
 				Path: path,
 			})
 		}
 		return nil
 	})
-	return photos
+	if err != nil {
+		return nil, err
+	}
+	return photos, nil
 }
 
 func isImageFile(filePath string) bool {
