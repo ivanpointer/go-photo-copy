@@ -106,9 +106,9 @@ func main() {
 		}
 
 		// // XXX: SKIP ALL BUT THE Xth SESSION
-		// if sessionCount != 6 {
-		// 	continue
-		// }
+		/*		if sessionCount != 3 && sessionCount != 6 {
+				continue
+			}*/
 
 		// Copy the photo
 		dest := filepath.Join(currentSession, filepath.Base(photo.Path))
